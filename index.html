@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScanServe</title>
+<style>
+  * { box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; background:#f5f5f5; margin:0; padding:0; }
+  .screen { display:none; padding:16px; padding-bottom:90px; min-height:100vh; }
+  .screen.active { display:block; }
+
+  h1 { text-align:center; color:#1a7a4c; font-size:22px; }
+  p.sub { text-align:center; color:#777; margin-top:-8px; }
+
+  /* شاشة الطاولة */
+  .table-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:24px; }
+  .table-btn { background:white; border:2px solid #1a7a4c; color:#1a7a4c; font-size:20px; font-weight:bold; padding:20px 0; border-radius:12px; text-align:center; }
+  .table-btn.selected { background:#1a7a4c; color:white; }
+
+  .next-btn { display:block; width:100%; padding:16px; background:#1a7a4c; color:white; border:none; border-radius:10px; font-size:16px; margin-top:24px; }
+  .next-btn:disabled { background:#ccc; }
+
+  /* شاشة التصنيفات */
+  .cat-card { background:white; border-radius:12px; padding:20px; margin-bottom:14px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.1); font-size:18px; font-weight:bold; color:#333; }
+  .cat-card span.emoji { font-size:34px; display:block; margin-bottom:8px; }
+
+  /* شاشة الأطباق */
+  .back-link { color:#1a7a4c; font-size:15px; margin-bottom:14px; display:inline-block; }
+  .dish-card { background:white; border-radius:12px; margin-bottom:14px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.1); }
+  .dish-card img { width:100%; height:150px; object-fit:cover; display:block; }
+  .dish-info { padding:12px; }
+  .dish-info h3 { margin:0 0 4px; font-size:16px; }
+  .dish-row { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+  .price { color:#1a7a4c; font-weight:bold; }
+  .qty-box { display:flex; align-items:center; gap:10px; }
+  .qty-box button { width:32px; height:32px; border:none; background:#1a7a4c; color:white; border-radius:8px; font-size:18px; }
+  .qty-box span { min-width:20px; text-align:center; font-weight:bold; }
+
+  /* الشريط العائم */
+  .cart-bar { position:fixed; bottom:0; left:0; right:0; background:#1a7a4c; color:white; padding:14px 16px; display:none; justify-content:space-between; align-items:center; }
+  .cart-bar.show { display:flex; }
+  .cart-bar button { background:white; color:#1a7a4c; border:none; padding:10px 18px; border-radius:8px; font-weight:bold; }
+
+  /* شاشة التأكيد */
+  .confirm { text-align:center; margin-top:120px; }
+  .confirm .icon { font-size:60px; }
+</style>
+</head>
+<body>
+
+<!-- شاشة 1: اختيار الطاولة -->
+<div class="screen active" id="screen-table">
+  <h1>🍽️ ScanServe</h1>
+  <p class="sub">اختر رقم طاولتك</p>
+  <div class="table-grid" id="tableGrid"></div>
+  <button class="next-btn" id="confirmTableBtn" disabled onclick="goToCategories()">تأكيد</button>
+</div>
+
+<!-- شاشة 2: التصنيفات -->
+<div class="screen" id="screen-categories">
+  <h1>القائمة</h1>
+  <p class="sub" id="tableLabel"></p>
+  <div class="cat-card" onclick="openCategory('traditional')"><span class="emoji">🍲</span>أكل تقليدي</div>
+  <div class="cat-card" onclick="openCategory('fast')"><span class="emoji">🍔</span>أكل سريع</div>
+  <div class="cat-card" onclick="openCategory('drinks')"><span class="emoji">🥤</span>مشروبات</div>
+</div>
+
+<!-- شاشة 3: الأطباق -->
+<div class="screen" id="screen-dishes">
+  <span class="back-link" onclick="showScreen('screen-categories')">→ رجوع للتصنيفات</span>
+  <h1 id="categoryTitle"></h1>
+  <div id="dishList"></div>
+</div>
+
+<!-- شاشة 4: التأكيد -->
+<div class="screen" id="screen-confirm">
+  <div class="confirm">
+    <div class="icon">⏳</div>
+    <h1>يرجى الانتظار</h1>
+    <p>لقد تم إرسال طلبك</p>
+  </div>
+</div>
+
+<!-- الشريط العائم -->
+<div class="cart-bar" id="cartBar">
+  <span id="cartTotal">0 دج</span>
+  <button onclick="sendOrder()">إرسال الطلب</button>
+</div>
+
+<script>
+let selectedTable = null;
+let cart = {}; // { dishId: qty }
+
+const menu = {
+  traditional: [
+    { id: 't1', name: 'كسكس باللحم', price: 900, img: 'https://placehold.co/300x200?text=كسكس' },
+    { id: 't2', name: 'شخشوخة', price: 700, img: 'https://placehold.co/300x200?text=شخشوخة' },
+  ],
+  fast: [
+    { id: 'f1', name: 'بيتزا مارغريتا', price: 800, img: 'https://placehold.co/300x200?text=بيتزا' },
+    { id: 'f2', name: 'برجر دجاج', price: 600, img: 'https://placehold.co/300x200?text=برجر' },
+  ],
+  drinks: [
+    { id: 'd1', name: 'عصير برتقال', price: 150, img: 'https://placehold.co/300x200?text=عصير' },
+    { id: 'd2', name:
